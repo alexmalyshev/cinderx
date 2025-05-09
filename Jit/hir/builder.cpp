@@ -6,8 +6,8 @@
 
 #include "ceval.h"
 #if PY_VERSION_HEX >= 0x030C0000
-#include "pycore_intrinsics.h"
-#include "pycore_runtime.h"
+#include "internal/pycore_intrinsics.h"
+#include "internal/pycore_runtime.h"
 #endif
 
 #include "cinderx/Common/ref.h"
@@ -29,10 +29,6 @@
 #include "cinderx/StaticPython/typed_method_def.h"
 #include "cinderx/Upgrade/upgrade_stubs.h" // @donotremove
 #include "cinderx/UpstreamBorrow/borrowed.h"
-
-#if PY_VERSION_HEX >= 0x030C0000
-#include "internal/pycore_intrinsics.h"
-#endif
 
 #include <algorithm>
 #include <deque>

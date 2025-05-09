@@ -3,6 +3,7 @@
 #include "cinderx/Jit/codegen/gen_asm.h"
 
 #include <Python.h>
+#include "internal/pycore_genobject.h"
 #if PY_VERSION_HEX < 0x030C0000
 #include "cinder/exports.h"
 #include "internal/pycore_shadow_frame.h"
@@ -167,6 +168,12 @@ prepareForDeopt(const uint64_t* regs, Runtime* runtime, std::size_t deopt_idx) {
 #else
   _PyInterpreterFrame* frame = tstate->cframe->current_frame;
   reifyFrame(frame, deopt_meta, deopt_meta.outermostFrame(), regs);
+  if (frame->f_code->co_flags & kCoFlagsAnyGenerator) {
+    auto base_gen = _PyGen_GetGeneratorFromFrame(frame);
+    JitGenObject* gen = JitGenObject::cast(base_gen);
+    JIT_CHECK(gen != nullptr, "Not a JIT generator");
+    deopt_jit_gen_object_only(gen);
+  }
   UPGRADE_NOTE(SUPPORT_JIT_INLINING, T198250666)
 #endif
   // Clear our references now that we've transferred them to the frame

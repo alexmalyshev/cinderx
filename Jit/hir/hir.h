@@ -7,7 +7,7 @@
 #include "cinderx/Common/ref.h"
 #include "cinderx/Common/util.h"
 #include "cinderx/Interpreter/opcode.h"
-#include "cinderx/Jit/bytecode.h"
+#include "cinderx/Jit/bytecode_offsets.h"
 #include "cinderx/Jit/config.h"
 #include "cinderx/Jit/deopt_patcher.h"
 #include "cinderx/Jit/hir/frame_state.h"
@@ -17,7 +17,6 @@
 #include "cinderx/Jit/intrusive_list.h"
 #include "cinderx/Jit/jit_time_log.h"
 #include "cinderx/StaticPython/typed-args-info.h"
-#include "cinderx/Upgrade/upgrade_assert.h" // @donotremove
 
 #include <algorithm>
 #include <array>
@@ -1193,6 +1192,17 @@ class INSTR_CLASS(CallCFunc, (TOptObject | TCUInt64), HasOutput, Operands<>) {
   static const std::vector<void*> kFuncPtrMap;
   static const std::vector<const char*> kFuncNames;
 };
+
+inline std::ostream& operator<<(std::ostream& os, CallCFunc::Func func) {
+  switch (func) {
+#define CALL_CFUNC_STR(X, ...) \
+  case CallCFunc::k##X:        \
+    return os << ##X;
+    default:
+      break;
+  }
+  return os << "<unknown CallCFunc>";
+}
 
 // Call to a C function pointer, the return value indicates an error. If the
 // return type is PyObject then an error is indicated by returning NULL. If
@@ -4407,3 +4417,9 @@ class Function {
 FrameState* get_frame_state(Instr& instr);
 const FrameState* get_frame_state(const Instr& instr);
 } // namespace jit::hir
+
+template <>
+struct fmt::formatter<jit::hir::OperandType> : fmt::ostream_formatter {};
+
+template <>
+struct fmt::formatter<jit::hir::CallCFunc::Func> : fmt::ostream_formatter {};

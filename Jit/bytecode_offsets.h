@@ -4,10 +4,15 @@
 
 #include <Python.h>
 
-#include "cinderx/Common/util.h"
+#if PY_VERSION_HEX >= 0x030E0000
+#include "internal/pycore_code.h"
+#endif
+
+#include "cinderx/Common/log.h"
 
 #include <limits>
 #include <ostream>
+#include <type_traits>
 
 namespace jit {
 
@@ -192,6 +197,14 @@ inline std::ostream& operator<<(std::ostream& os, jit::BCOffset offset) {
 
 inline std::ostream& operator<<(std::ostream& os, jit::BCIndex index) {
   return os << index.value();
+}
+
+inline auto format_as(const jit::BCOffset& offset) {
+  return offset.value();
+}
+
+inline auto format_as(const jit::BCIndex& idx) {
+  return idx.value();
 }
 
 } // namespace jit

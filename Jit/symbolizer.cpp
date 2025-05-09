@@ -8,6 +8,8 @@
 
 #include <cxxabi.h>
 #include <dlfcn.h>
+#include <elf.h>
+#include <link.h> // for ElfW
 
 #include <cstdio>
 #include <cstdlib>
@@ -173,9 +175,13 @@ std::optional<std::string_view> Symbolizer::symbolize(const void* func) {
   }
   // Fall back to reading our own ELF header.
   const std::byte* exe = file_.data().data();
-  auto sym = reinterpret_cast<const ElfW(Sym)*>(exe + symtab_->sh_offset);
-  auto str = reinterpret_cast<const char*>(exe + strtab_->sh_offset);
-  for (size_t i = 0; i < symtab_->sh_size / sizeof(ElfW(Sym)); i++) {
+
+  auto symtab = reinterpret_cast<const ElfW(Shdr)*>(symtab_);
+  auto strtab = reinterpret_cast<const ElfW(Shdr)*>(strtab_);
+
+  auto sym = reinterpret_cast<const ElfW(Sym)*>(exe + symtab->sh_offset);
+  auto str = reinterpret_cast<const char*>(exe + strtab->sh_offset);
+  for (size_t i = 0; i < symtab->sh_size / sizeof(ElfW(Sym)); i++) {
     if (reinterpret_cast<void*>(sym[i].st_value) == func) {
       return cache(func, str + sym[i].st_name);
     }

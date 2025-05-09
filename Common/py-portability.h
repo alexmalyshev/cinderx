@@ -19,3 +19,26 @@
 #define _PyType_GetDict(type) ((type)->tp_dict)
 #define _PyObject_CallNoArgs _PyObject_CallNoArg
 #endif
+
+#if PY_VERSION_HEX < 0x030C0000
+#define _Py_IMMORTAL_REFCNT kImmortalInitialCount
+#endif
+
+#if PY_VERSION_HEX >= 0x030C0000
+#define IMMORTALIZE(OBJ) Py_SET_REFCNT((OBJ), _Py_IMMORTAL_REFCNT)
+#elif defined(Py_IMMORTAL_INSTANCES)
+#define IMMORTALIZE(OBJ) Py_SET_IMMORTAL(OBJ)
+#endif
+
+// Basic renames that went into 3.13.
+#if PY_VERSION_HEX < 0x030D0000
+#define PyList_Extend _PyList_Extend
+#define PyLong_AsInt _PyLong_AsInt
+#define PyTime_AsSecondsDouble _PyTime_AsSecondsDouble
+#define PyTime_t _PyTime_t
+#define Py_IsFinalizing _Py_IsFinalizing
+#endif
+
+#if PY_VERSION_HEX < 0x030E0000
+#define _PyGen_GetGeneratorFromFrame _PyFrame_GetGenerator
+#endif

@@ -8,7 +8,6 @@
 #include <cstdint>
 #include <memory>
 #include <ostream>
-#include <tuple>
 #include <variant>
 
 // This file defines operand classes in LIR.
@@ -27,26 +26,17 @@ class Operand;
 class LinkedOperand;
 class MemoryIndirect;
 
-// base class of operand
-// defines the interface that all the operands must have.
-class OperandBase {
- public:
-  explicit OperandBase(Instruction* parent) : parent_instr_(parent) {}
-  OperandBase(const OperandBase& ob)
-      : parent_instr_(ob.parent_instr_), last_use_(ob.last_use_) {}
-  virtual ~OperandBase() {}
-
-  /* operand types:
-   *   - None:   the operand is not used.
-   *   - Vreg:   the operand is in a virtual register (not yet
-   *             allocated to a physical location);
-   *   - Reg:    the operand is allocated to a physical register;
-   *   - Stack:  the operand is allocated to a memory stack slot;
-   *   - Mem:    the operand is allocated to a memory address;
-   *   - Ind:    the operand is a memory indirect reference
-   *   - Imm:    the operand is an immediate value;
-   *   - Lbl:    the operand refers to a basic block.
-   */
+/* operand types:
+ *   - None:   the operand is not used.
+ *   - Vreg:   the operand is in a virtual register (not yet
+ *             allocated to a physical location);
+ *   - Reg:    the operand is allocated to a physical register;
+ *   - Stack:  the operand is allocated to a memory stack slot;
+ *   - Mem:    the operand is allocated to a memory address;
+ *   - Ind:    the operand is a memory indirect reference
+ *   - Imm:    the operand is an immediate value;
+ *   - Lbl:    the operand refers to a basic block.
+ */
 #define FOREACH_OPERAND_TYPE(X) \
   X(None)                       \
   X(Vreg)                       \
@@ -57,17 +47,50 @@ class OperandBase {
   X(Imm)                        \
   X(Label)
 
-  enum Type {
+enum OperandType {
 #define OPERAND_DECL_TYPE(v, ...) k##v,
-    FOREACH_OPERAND_TYPE(OPERAND_DECL_TYPE)
+  FOREACH_OPERAND_TYPE(OPERAND_DECL_TYPE)
 #undef OPERAND_DECL_TYPE
-  };
+};
 
-#define OPERAND_DECL_TYPE_TEST(v, ...) \
-  bool is##v() const {                 \
-    return type() == Type::k##v;       \
+inline std::ostream& operator<<(std::ostream& os, OperandType ty) {
+  switch (ty) {
+#define OPERAND_TYPE_STRINGIFY(V, ...) \
+  case jit::lir::k##V:                 \
+    return os << #V;
+    FOREACH_OPERAND_TYPE(OPERAND_TYPE_STRINGIFY)
+#undef OPERAND_TYPE_STRINGIFY
+    default:
+      break;
   }
-  FOREACH_OPERAND_TYPE(OPERAND_DECL_TYPE_TEST)
+  return os << "<unknown>";
+}
+
+} // namespace jit::lir
+
+template <>
+struct fmt::formatter<jit::lir::OperandType> : fmt::ostream_formatter {};
+
+namespace jit::lir {
+
+// base class of operand
+// defines the interface that all the operands must have.
+class OperandBase {
+ public:
+  explicit OperandBase(Instruction* parent) : parent_instr_(parent) {}
+  OperandBase(const OperandBase& ob)
+      : parent_instr_(ob.parent_instr_), last_use_(ob.last_use_) {}
+  virtual ~OperandBase() {}
+
+  using Type = OperandType;
+
+#define OPERAND_DECL_TYPE_DEFINES(v, ...)         \
+  static constexpr auto k##v = OperandType::k##v; \
+                                                  \
+  bool is##v() const {                            \
+    return type() == Type::k##v;                  \
+  }
+  FOREACH_OPERAND_TYPE(OPERAND_DECL_TYPE_DEFINES)
 #undef OPERAND_DECL_TYPE_TEST
 
   virtual uint64_t getConstant() const = 0;

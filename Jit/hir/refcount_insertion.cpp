@@ -7,12 +7,10 @@
 #include "cinderx/Jit/hir/instr_effects.h"
 #include "cinderx/Jit/hir/optimization.h"
 #include "cinderx/Jit/hir/printer.h"
-#include "cinderx/Jit/hir/ssa.h"
 
 #include <fmt/ostream.h>
 
 #include <algorithm>
-#include <queue>
 #include <set>
 #include <vector>
 
@@ -364,10 +362,25 @@ std::ostream& operator<<(std::ostream& os, const StateMap& regs) {
   std::sort(states.begin(), states.end(), RegStateLess{});
   fmt::print(os, "StateMap[{}] = {{\n", states.size());
   for (auto state : states) {
-    fmt::print(os, "  {} -> {}\n", state->model()->name(), *state);
+    fmt::print(
+        os, "  {} -> {}\n", state->model()->name(), fmt::streamed(*state));
   }
   return os << "}";
 }
+
+} // namespace
+
+} // namespace jit::hir
+
+template <>
+struct fmt::formatter<jit::hir::RegState> : fmt::ostream_formatter {};
+
+template <>
+struct fmt::formatter<jit::hir::StateMap> : fmt::ostream_formatter {};
+
+namespace jit::hir {
+
+namespace {
 
 // Global state used by the analysis.
 struct Env {
@@ -1034,7 +1047,7 @@ void processInstr(Env& env, Instr& instr) {
 
   TRACE("Processing '{}' with state:\n{}", instr, env.live_regs);
   if (!dying_regs.empty()) {
-    TRACE("dying_regs: {}", dying_regs);
+    TRACE("dying_regs: {}", fmt::streamed(dying_regs));
   }
 
   if (instr.IsPhi()) {

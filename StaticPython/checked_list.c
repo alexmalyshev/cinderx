@@ -4,6 +4,10 @@
 
 #include <Python.h>
 
+#if PY_VERSION_HEX >= 0x030D0000
+#include "internal/pycore_modsupport.h"
+#endif
+
 #include "internal/pycore_abstract.h" // _PyIndex_Check()
 #include "internal/pycore_interp.h" // PyInterpreterState.list
 #include "internal/pycore_object.h" // _PyObject_GC_TRACK()
@@ -2915,7 +2919,7 @@ static PyObject* list_sort(
       goto skip_optional_kwonly;
     }
   }
-  reverse = _PyLong_AsInt(args[1]);
+  reverse = PyLong_AsInt(args[1]);
   if (reverse == -1 && PyErr_Occurred()) {
     goto exit;
   }

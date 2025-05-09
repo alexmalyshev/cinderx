@@ -259,6 +259,9 @@ def main() -> None:
                 ],
                 extra_compile_args=[
                     "-Wno-ambiguous-reversed-operator",
+                    "-Wno-c++11-narrowing",
+                    "-Wno-sign-compare",
+                    "-Wno-vla-cxx-extension",
                 ],
                 depends=header_files,
             )
