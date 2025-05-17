@@ -33,6 +33,7 @@
 #define PyTime_AsSecondsDouble _PyTime_AsSecondsDouble
 #define PyTime_t _PyTime_t
 #define Py_IsFinalizing _Py_IsFinalizing
+#define _Py_list_freelist _Py_list_state
 
 #define _PyFrame_GetCode(F) ((F)->f_code)
 inline int PyList_Extend(PyObject* list, PyObject* iterable) {
