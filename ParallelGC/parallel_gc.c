@@ -932,7 +932,7 @@ static void delete_garbage(
         Py_INCREF(op);
         (void)clear(op);
         if (_PyErr_Occurred(tstate)) {
-          _PyErr_WriteUnraisableMsg("in tp_clear of", (PyObject*)Py_TYPE(op));
+          PyErr_WriteUnraisable((PyObject*)Py_TYPE(op));
         }
         Py_DECREF(op);
       }
@@ -1253,7 +1253,7 @@ static Py_ssize_t gc_collect_main(
     if (nofail) {
       _PyErr_Clear(tstate);
     } else {
-      _PyErr_WriteUnraisableMsg("in garbage collection", NULL);
+      PyErr_FormatUnraisable("in garbage collection");
     }
   }
 
