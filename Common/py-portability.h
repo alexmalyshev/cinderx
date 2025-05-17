@@ -16,6 +16,7 @@
 
 #if PY_VERSION_HEX >= 0x030E0000
 #include "internal/pycore_genobject.h"
+#include "internal/pycore_frame.h"
 #endif
 
 #if PY_VERSION_HEX < 0x030C0000
@@ -45,7 +46,6 @@
 #define _PyEval_FormatExcCheckArg Cix_format_exc_check_arg
 
 #define _PyFrame_GetCode(F) ((F)->f_code)
-
 inline int PyList_Extend(PyObject* list, PyObject* iterable) {
   if (!PyList_Check(list)) {
     PyErr_BadInternalCall();
@@ -58,6 +58,11 @@ inline int PyList_Extend(PyObject* list, PyObject* iterable) {
 static inline int PyTime_MonotonicRaw(PyTime_t* result) {
   *result = _PyTime_GetMonotonicClock();
   return 0;
+}
+
+inline void PyErr_FormatUnraisable(const char* fmt, ...) {
+  // This isn't correct, but that's okay for now.
+  return _PyErr_WriteUnraisableMsg(fmt, NULL);
 }
 
 #endif
