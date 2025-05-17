@@ -18,7 +18,7 @@
 #include "internal/pycore_shadow_frame.h"
 #endif
 
-#if PY_VERSION_HEX < 0x030D0000
+#if PY_VERSION_HEX < 0x030D0000 && ENABLE_INTERPRETER
 #include "cinder/hooks.h"
 #endif
 
@@ -781,11 +781,15 @@ void initCinderHooks() {
 }
 
 void initFrameEvalFunc() {
+#ifdef ENABLE_INTERPRETER
   Ci_hook_EvalFrame = Ci_EvalFrame;
+#endif
 }
 
 void finiFrameEvalFunc() {
+#ifdef ENABLE_INTERPRETER
   Ci_hook_EvalFrame = nullptr;
+#endif
 }
 
 int cinder_init() {
