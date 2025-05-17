@@ -913,6 +913,18 @@ int cinder_init() {
   return _Ci_CreateStaticModule();
 }
 
+bool isCodeRunning() {
+  PyThreadState* tstate = PyThreadState_Get();
+#if PY_VERSION_HEX < 0x030C0000
+  return tstate->shadow_frame != nullptr;
+#elif PY_VERSION_HEX < 0x030D0000
+  return tstate->cframe != &tstate->root_cframe;
+#else
+  // TODO: Come back to this and verify it.
+  return tstate->current_frame != nullptr;
+#endif
+}
+
 // Attempts to shutdown CinderX. This is very much a best-effort with the
 // primary goals being to ensure Python shuts down without crashing, and
 // tests which do some kind of re-initialization continue to work. A secondary
@@ -924,14 +936,7 @@ int cinder_fini() {
   _PyClassLoader_ClearCache();
   _PyClassLoader_ClearValueCache();
 
-  PyThreadState* tstate = PyThreadState_Get();
-  bool code_running =
-#if PY_VERSION_HEX < 0x030C0000
-      tstate->shadow_frame != nullptr;
-#else
-      tstate->cframe != &tstate->root_cframe;
-#endif
-  if (code_running) {
+  if (isCodeRunning()) {
     // If any Python code is running we can't tell if JIT code is in use. Even
     // if every frame in the callstack is interpreter-owned, some of them could
     // be the result of deopt and JIT code may still be on the native stack.
@@ -1134,8 +1139,9 @@ PyMethodDef _cinderx_methods[] = {
     {"_is_compile_perf_trampoline_pre_fork_enabled",
      is_compile_perf_trampoline_pre_fork_enabled,
      METH_NOARGS,
-     PyDoc_STR("Return whether compile perf-trampoline entries before fork is "
-               "enabled or not.")},
+     PyDoc_STR(
+         "Return whether compile perf-trampoline entries before fork is "
+         "enabled or not.")},
 #if PY_VERSION_HEX < 0x030C0000
     {"_get_entire_call_stack_as_qualnames_with_lineno",
      get_entire_call_stack_as_qualnames_with_lineno,
@@ -1145,8 +1151,9 @@ PyMethodDef _cinderx_methods[] = {
     {"_get_entire_call_stack_as_qualnames_with_lineno_and_frame",
      get_entire_call_stack_as_qualnames_with_lineno_and_frame,
      METH_NOARGS,
-     PyDoc_STR("Return the current stack as a list of tuples (qualname, "
-               "lineno, PyFrame | None).")},
+     PyDoc_STR(
+         "Return the current stack as a list of tuples (qualname, "
+         "lineno, PyFrame | None).")},
 #endif
     {"immortalize_heap",
      cinder_immortalize_heap,
