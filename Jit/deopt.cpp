@@ -199,7 +199,7 @@ Ref<> profileDeopt(
   // Bytecode offset will be negative if the interpreter wants to resume
   // executing at the start of the function.  Report a negative/invalid opcode
   // for that case.
-  int opcode = -1;
+  [[maybe_unused]] int opcode = -1;
   if (bc_off.value() >= 0) {
     BytecodeInstruction bc_instr{code, bc_off};
     opcode = bc_instr.opcode();
@@ -302,12 +302,18 @@ static void reifyFrameImpl(
     const DeoptFrameMetadata& frame_meta,
     bool forced_deopt,
     const uint64_t* regs) {
+  BCIndex idx = getDeoptResumeIndex(meta, frame_meta, forced_deopt);
+
+#if PY_VERSION_HEX >= 0x030D0000
+  frame->instr_ptr = _PyCode_CODE(_PyFrame_GetCode(frame)) + idx.value();
+#else
   // Note frame->prev_instr doesn't point to the previous instruction, it
-  // actually points to the memory location sizeof(Py_CODEUNIT) bytes before
-  // the next instruction to execute. This means it might point to inline-
-  // cache data or a negative location.
-  int idx = (getDeoptResumeIndex(meta, frame_meta, forced_deopt) - 1).value();
-  frame->prev_instr = _PyCode_CODE(_PyFrame_GetCode(frame)) + idx;
+  // actually points to the memory location sizeof(Py_CODEUNIT) bytes before the
+  // next instruction to execute. This means it might point to inline- cache
+  // data or a negative location.
+  idx--;
+  frame->prev_instr = _PyCode_CODE(_PyFrame_GetCode(frame)) + idx.value();
+#endif
 
   MemoryView mem{regs};
   reifyLocalsplus(frame, meta, frame_meta, mem);
