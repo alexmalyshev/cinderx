@@ -15,7 +15,6 @@
 #include "internal/pycore_ceval.h"
 // clang-format on
 
-#include <elf.h>
 #include <fcntl.h>
 #include <fmt/format.h>
 #include <sys/file.h>
@@ -226,9 +225,9 @@ FileInfo openJitdumpFile() {
   header.version = 1;
   header.total_size = sizeof(header);
 #ifdef __x86_64__
-  header.elf_mach = EM_X86_64;
+  header.elf_mach = 62; // EM_X86_64
 #elif defined(__aarch64__)
-  header.elf_mach = EM_AARCH64;
+  header.elf_mach = 183; // EM_AARCH64
 #else
 #error Please provide the ELF e_machine value for your architecture.
 #endif
