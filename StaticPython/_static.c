@@ -1907,8 +1907,14 @@ int _Ci_CreateStaticModule(void) {
     return -1;
   }
 
+  // TODO: Not 100% sure this is correct.
+#if PY_VERSION_HEX < 0x030D0000
   PyObject* modules = PyImport_GetModuleDict();
   int st = _PyImport_FixupExtensionObject(mod, modname, modname, modules);
+#else
+  int st = 0;
+#endif
+
   Py_DECREF(modname);
   if (st == -1 || _static_exec(mod) < 0) {
     Py_DECREF(mod);
