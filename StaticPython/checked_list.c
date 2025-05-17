@@ -4,6 +4,10 @@
 
 #include <Python.h>
 
+#if PY_VERSION_HEX >= 0x030E0000
+#include "internal/pycore_freelist.h"
+#endif
+
 #if PY_VERSION_HEX >= 0x030D0000
 #include "internal/pycore_ceval.h"
 #include "internal/pycore_modsupport.h"
@@ -195,17 +199,25 @@ static void list_dealloc(PyListObject* op) {
     }
     PyMem_Free(op->ob_item);
   }
+
+#if PY_VERSION_HEX >= 0x030E0000
+  _Py_FREELIST_FREE(lists, op, Py_TYPE(op)->tp_free);
+#else
   struct _Py_list_state* state = get_list_state();
+
 #ifdef Py_DEBUG
   // list_dealloc() must not be called after _PyList_Fini()
   assert(state->numfree != -1);
 #endif
+
   if (state->numfree < PyList_MAXFREELIST &&
       Ci_List_CheckIncludingChecked((PyObject*)op)) {
     state->free_list[state->numfree++] = op;
   } else {
     Py_TYPE(op)->tp_free((PyObject*)op);
   }
+#endif
+
   Py_TRASHCAN_END
 }
 
@@ -3158,33 +3170,33 @@ exit:
 #endif
 
 static PyObject* chklist_alloc(PyTypeObject* type, Py_ssize_t nitems) {
-  struct _Py_list_state* state = get_list_state();
   PyListObject* op;
-#ifdef SHOW_ALLOC_COUNT
-  static int initialized = 0;
-  if (!initialized) {
-    Py_AtExit(show_alloc);
-    initialized = 1;
-  }
-#endif
 
+#if PY_VERSION_HEX >= 0x030E0000
+
+  op = _Py_FREELIST_POP(PyListObject, lists);
+  if (op == NULL) {
+    op = PyObject_GC_New(PyListObject, type);
+    if (op == NULL) {
+      return NULL;
+    }
+  }
+
+#else
+  struct _Py_list_state* state = get_list_state();
   if (state->numfree) {
     state->numfree--;
     op = state->free_list[state->numfree];
     Py_SET_TYPE(op, type);
     _Py_NewReference((PyObject*)op);
     Py_INCREF(type);
-#ifdef SHOW_ALLOC_COUNT
-    count_reuse++;
-#endif
   } else {
     op = PyObject_GC_New(PyListObject, type);
     if (op == NULL)
       return NULL;
-#ifdef SHOW_ALLOC_COUNT
-    count_alloc++;
-#endif
   }
+#endif
+
   op->ob_item = NULL;
   Py_SET_SIZE(op, 0);
   op->allocated = 0;

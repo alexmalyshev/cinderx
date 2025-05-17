@@ -19,7 +19,8 @@
 #endif
 
 #if PY_VERSION_HEX < 0x030D0000
-#include "cinder/hooks.h"
+// #include "cinder/hooks.h"
+PyAPI_DATA(_PyFrameEvalFunction) Ci_hook_EvalFrame;
 #endif
 
 #if PY_VERSION_HEX >= 0x030D0000

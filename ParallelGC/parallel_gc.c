@@ -568,6 +568,7 @@ static void move_unreachable(PyGC_Head* young, PyGC_Head* unreachable) {
   unreachable->_gc_next &= ~NEXT_MASK_UNREACHABLE;
 }
 
+// FIXME: BORROW THIS!
 static void untrack_tuples(PyGC_Head* head) {
   PyGC_Head *next, *gc = GC_NEXT(head);
   while (gc != head) {
