@@ -1,0 +1,25 @@
+# CMake.
+
+*.cmake
+CMakeCache.txt
+CMakeFiles
+_deps
+
+# Make.
+
+Makefile
+
+# Setuptools.
+
+cinderx.egg-info
+dist
+
+# LSP.
+
+.cache
+compile_commands.json
+
+# Build artifacts.
+*.a
+*.o
+*.so
