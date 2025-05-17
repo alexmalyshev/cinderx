@@ -45,6 +45,9 @@
 #include "cinderx/Jit/runtime.h"
 #include "cinderx/Shadowcode/shadowcode.h"
 #include "cinderx/Upgrade/upgrade_stubs.h" // @donotremove
+
+#include "fmt/std.h"
+
 #ifdef ENABLE_DISASSEMBLER
 #include "i386-dis/dis-asm.h"
 #else
@@ -2927,17 +2930,19 @@ int initialize() {
 
   jit_ctx->setCinderJitModule(Ref<PyObject>::steal(mod));
 
-  PyObject* modname = PyUnicode_InternFromString("cinderjit");
+  auto modname = Ref<>::steal(PyUnicode_InternFromString("cinderjit"));
   if (modname == nullptr) {
     return -1;
   }
 
+  // TODO: Not 100% sure this is correct.
+#if PY_VERSION_HEX < 0x030D0000
   PyObject* modules = PyImport_GetModuleDict();
   int st = _PyImport_FixupExtensionObject(mod, modname, modname, modules);
-  Py_DECREF(modname);
   if (st == -1) {
     return -1;
   }
+#endif
 
   if (install_jit_audit_hook() < 0 || register_fork_callback(mod) < 0) {
     return -1;
