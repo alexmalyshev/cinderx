@@ -104,8 +104,9 @@ _PyClassLoader_ThunkSignature* _PyClassLoader_GetThunkSignatureFromCode(
   }
 
   // See if we have a fixed-size signature for a method w/ no primitives.
+  size_t simple_sigs_len = sizeof(simple_sigs) / sizeof(simple_sigs[0]);
   if ((arg_count + extra_args) <
-          sizeof(simple_sigs) / sizeof(_PyClassLoader_ThunkSignature) &&
+      (int)simple_sigs_len &&
       ret_typecode == TYPED_OBJECT) {
     return &simple_sigs[arg_count + extra_args];
   }
