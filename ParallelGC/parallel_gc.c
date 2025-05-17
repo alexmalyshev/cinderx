@@ -581,6 +581,8 @@ static void untrack_tuples(PyGC_Head* head) {
 
 /* Try to untrack all currently tracked dictionaries */
 static void untrack_dicts(PyGC_Head* head) {
+  // _PyDict_MaybeUntrack was removed in 3.14.
+#if PYTHON_VERSION_HEX >= 0x030E0000
   PyGC_Head *next, *gc = GC_NEXT(head);
   while (gc != head) {
     PyObject* op = FROM_GC(gc);
@@ -590,6 +592,7 @@ static void untrack_dicts(PyGC_Head* head) {
     }
     gc = next;
   }
+#endif
 }
 
 /* Return true if object has a pre-PEP 442 finalization method. */
