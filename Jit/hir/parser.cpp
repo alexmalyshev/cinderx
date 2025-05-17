@@ -132,7 +132,12 @@ Type HIRParser::parseType(std::string_view str) {
   }
 
   if (base <= TFloat) {
+#ifndef __APPLE__
     return parseNumberLiteral<double>(spec_string, PyFloat_FromDouble);
+#else
+    throw std::runtime_error{
+        "Apple Clang has bad support for from_chars<double>}"};
+#endif
   }
 
   std::optional<intptr_t> spec_value;
