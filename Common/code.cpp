@@ -90,7 +90,11 @@ int uninstrument(PyCodeObject* code, int index) {
     return code->_co_monitoring->per_instruction_opcodes[index];
   }
   if (opcode == INSTRUMENTED_LINE) {
+#if PY_VERSION_HEX >= 0x030D0000
+    return code->_co_monitoring->lines->data[index * code->_co_monitoring->lines->bytes_per_entry];
+#else
     return code->_co_monitoring->lines[index].original_opcode;
+#endif
   }
 #endif
 
