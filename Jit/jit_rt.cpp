@@ -264,10 +264,12 @@ JITRT_StaticCallFPReturn JITRT_CallWithIncorrectArgcountFPReturn(
       "checks !!!",
       jit::funcFullname(func));
 
+  auto interpVectorcall = getInterpretedVectorcall(func);
+
   PyObject* defaults = func->func_defaults;
   if (defaults == nullptr) {
     // Function has no defaults; there's nothing we can do.
-    Ci_StaticFunction_Vectorcall((PyObject*)func, args, nargsf, nullptr);
+    interpVectorcall((PyObject*)func, args, nargsf, nullptr);
     return {0.0, 0.0};
   }
   Py_ssize_t defcount = PyTuple_GET_SIZE(defaults);
@@ -277,7 +279,7 @@ JITRT_StaticCallFPReturn JITRT_CallWithIncorrectArgcountFPReturn(
 
   if (nargs + defcount < argcount || nargs > argcount) {
     // Not enough args with defaults, or too many args without defaults.
-    Ci_StaticFunction_Vectorcall((PyObject*)func, args, nargsf, nullptr);
+    interpVectorcall((PyObject*)func, args, nargsf, nullptr);
     return {0.0, 0.0};
   }
 
@@ -321,14 +323,14 @@ JITRT_StaticCallReturn JITRT_CallWithIncorrectArgcount(
       "checks !!!",
       jit::funcFullname(func));
 
+  auto interpVectorcall = getInterpretedVectorcall(func);
+
   PyObject* defaults = func->func_defaults;
   if (defaults == nullptr) {
     // Function has no defaults; there's nothing we can do.
     // Fallback to the default _PyFunction_Vectorcall implementation
     // to produce an appropriate exception.
-    return {
-        Ci_StaticFunction_Vectorcall((PyObject*)func, args, nargsf, nullptr),
-        nullptr};
+    return {interpVectorcall((PyObject*)func, args, nargsf, nullptr), nullptr};
   }
   Py_ssize_t defcount = PyTuple_GET_SIZE(defaults);
   Py_ssize_t nargs = PyVectorcall_NARGS(nargsf);
@@ -337,9 +339,7 @@ JITRT_StaticCallReturn JITRT_CallWithIncorrectArgcount(
 
   if (nargs + defcount < argcount || nargs > argcount) {
     // Not enough args with defaults, or too many args without defaults.
-    return {
-        Ci_StaticFunction_Vectorcall((PyObject*)func, args, nargsf, nullptr),
-        nullptr};
+    return {interpVectorcall((PyObject*)func, args, nargsf, nullptr), nullptr};
   }
 
   Py_ssize_t i;
@@ -435,8 +435,9 @@ TRetType JITRT_CallStaticallyWithPrimitiveSignatureWorker(
       (PyObject*)func, (PyObject**)arg_space.get(), nargsf, nullptr);
 
 fail:
+  auto interpVectorcall = getInterpretedVectorcall(func);
   PyObject* res =
-      Ci_StaticFunction_Vectorcall((PyObject*)func, args, nargsf, nullptr);
+      interpVectorcall((PyObject*)func, args, nargsf, nullptr);
   JIT_DCHECK(res == nullptr, "should alway be reporting an error");
   return TRetType();
 }
@@ -493,7 +494,8 @@ TRetType JITRT_CallStaticallyWithPrimitiveSignatureTemplate(
           arg_info);
     }
 
-    Ci_StaticFunction_Vectorcall((PyObject*)func, args, nargsf, kwnames);
+    auto interpVectorcall = getInterpretedVectorcall(func);
+    interpVectorcall((PyObject*)func, args, nargsf, kwnames);
     return TRetType();
   }
 
@@ -547,17 +549,18 @@ JITRT_StaticCallReturn JITRT_ReportStaticArgTypecheckErrorsWithPrimitiveReturn(
 }
 
 PyObject* JITRT_ReportStaticArgTypecheckErrors(
-    PyObject* func,
+    PyObject* func_obj,
     PyObject** args,
     size_t nargsf,
     PyObject* /* kwnames */) {
-  auto code = reinterpret_cast<PyCodeObject*>(
-      reinterpret_cast<PyFunctionObject*>(func)->func_code);
+  BorrowedRef<PyFunctionObject> func{func_obj};
+  BorrowedRef<PyCodeObject> code{func->func_code};
+  auto interpVectorcall = getInterpretedVectorcall(func);
   int nkwonly = code->co_kwonlyargcount;
   if (code == nullptr || nkwonly == 0) {
     // We explicitly pass in nullptr for kwnames as the default arg count can
     // be smuggled in to this function in place of kwnames.
-    return Ci_StaticFunction_Vectorcall(func, args, nargsf, nullptr);
+    return interpVectorcall(func, args, nargsf, nullptr);
   }
   // This function is called after we've successfully bound all
   // arguments. However, we want to use the interpreter to construct the
@@ -578,7 +581,7 @@ PyObject* JITRT_ReportStaticArgTypecheckErrors(
     nargs -= 1;
   }
   Py_ssize_t flags = vectorcall_flags(nargsf);
-  return Ci_StaticFunction_Vectorcall(func, args, nargs | flags, new_kwnames);
+  return interpVectorcall(func, args, nargs | flags, new_kwnames);
 }
 
 #if PY_VERSION_HEX < 0x030C0000
