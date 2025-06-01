@@ -707,6 +707,16 @@ PyObject* Ci_Builtin_Next_Core(PyObject* it, PyObject* def) {
 }
 
 int init_upstream_borrow(void) {
-  // Nothing to do here; retained for consistency with 3.10
+  // Initialize the Cix_PyUnion_Type global reference.
+  PyObject* unionobj =
+      PyNumber_Or((PyObject*)&PyLong_Type, (PyObject*)&PyUnicode_Type);
+  if (unionobj != NULL) {
+    Cix_PyUnion_Type = Py_TYPE(unionobj);
+    Py_DECREF(unionobj);
+  }
+  if (Cix_PyUnion_Type == NULL) {
+    return -1;
+  }
+
   return 0;
 }
