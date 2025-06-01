@@ -28,15 +28,8 @@ extern "C" {
 #define Cix_PyTypeAlias_Type _PyTypeAlias_Type
 #endif
 
-#if PY_VERSION_HEX < 0x030C0000
-// In 3.10 we create a new union object and grab the type and store it here.
+// We create a new union object and grab the type and store it here.
 extern PyTypeObject* Cix_PyUnion_Type;
-#else
-// In 3.12 _PyUnion_Type is exported, but it's hidden in an internal header
-// file.
-extern PyTypeObject _PyUnion_Type;
-#define Cix_PyUnion_Type &_PyUnion_Type
-#endif
 
 PyObject* Cix_PyGen_yf(PyGenObject* gen);
 PyObject* Cix_PyCoro_GetAwaitableIter(PyObject* o);
