@@ -257,6 +257,13 @@ JITRT_StaticCallFPReturn JITRT_CallWithIncorrectArgcountFPReturn(
     PyObject** args,
     size_t nargsf,
     int argcount) {
+  BorrowedRef<PyCodeObject> code{func->func_code};
+  JIT_CHECK(
+      code->co_flags & CI_CO_STATICALLY_COMPILED,
+      "!!! Function {} not compiled with SP but hit the SP incorrect argcount "
+      "checks !!!",
+      jit::funcFullname(func));
+
   PyObject* defaults = func->func_defaults;
   if (defaults == nullptr) {
     // Function has no defaults; there's nothing we can do.
@@ -307,6 +314,13 @@ JITRT_StaticCallReturn JITRT_CallWithIncorrectArgcount(
     PyObject** args,
     size_t nargsf,
     int argcount) {
+  BorrowedRef<PyCodeObject> code{func->func_code};
+  JIT_CHECK(
+      code->co_flags & CI_CO_STATICALLY_COMPILED,
+      "!!! Function {} not compiled with SP but hit the SP incorrect argcount "
+      "checks !!!",
+      jit::funcFullname(func));
+
   PyObject* defaults = func->func_defaults;
   if (defaults == nullptr) {
     // Function has no defaults; there's nothing we can do.
