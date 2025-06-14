@@ -59,7 +59,7 @@ setdlopenflags(old_dlopen_flags | RTLD_GLOBAL)
 try:
     # Currently if we try to import _cinderx on runtimes without our internal patches
     # the import will crash.  This is meant to go away in the future.
-    if not is_supported_runtime():
+    if False and not is_supported_runtime():
         raise ImportError(
             f"The _cinderx native extension is not supported for Python version '{sys.version}' on platform '{sys.platform}'"
         )
