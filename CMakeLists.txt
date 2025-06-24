@@ -238,15 +238,24 @@ target_link_libraries(cached-properties PRIVATE common borrowed)
 
 set(INTERP_SOURCES ${PROJECT_SOURCE_DIR}/Interpreter/iter_helpers.c)
 
-if (${PY_VERSION} EQUAL 3.12)
-  set(SOURCE_CINDERX_OPCODE_TARGETS_H ${PROJECT_SOURCE_DIR}/Interpreter/3.12/cinderx_opcode_targets.h)
-  set(SOURCE_CINDER_OPCODE_H ${PROJECT_SOURCE_DIR}/Interpreter/3.12/cinder_opcode.h)
-  set(SOURCE_OPCODE_H ${PROJECT_SOURCE_DIR}/Interpreter/3.12/opcode.h)
-
-  if (${META_PYTHON})
-    set(INTERP_SOURCES ${INTERP_SOURCES} ${PROJECT_SOURCE_DIR}/Interpreter/3.12/interpreter.c)
-  endif()
+set(HACK_314 0)
+if (${PY_VERSION} EQUAL 3.14)
+  set(HACK_314 1)
+  set(PY_VERSION 3.12)
 endif()
+
+set(SOURCE_CINDERX_OPCODE_TARGETS_H ${PROJECT_SOURCE_DIR}/Interpreter/${PY_VERSION}/cinderx_opcode_targets.h)
+set(SOURCE_CINDER_OPCODE_H ${PROJECT_SOURCE_DIR}/Interpreter/${PY_VERSION}/cinder_opcode.h)
+set(SOURCE_OPCODE_H ${PROJECT_SOURCE_DIR}/Interpreter/${PY_VERSION}/opcode.h)
+
+if (${META_PYTHON})
+  set(INTERP_SOURCES ${INTERP_SOURCES} ${PROJECT_SOURCE_DIR}/Interpreter/${PY_VERSION}/interpreter.c)
+endif()
+
+if (${HACK_314})
+  set(PY_VERSION 3.14)
+endif()
+
 
 # Generate cinderx/Interpreter header files.
 
@@ -287,7 +296,7 @@ target_link_libraries(static-python PRIVATE fmt::fmt common borrowed)
 ########################################
 # Jit/
 
-file(GLOB_RECURSE JIT_SOURCES ${PROJECT_SOURCE_DIR}/Jit/*.cpp ${PROJECT_SOURCE_DIR}/Jit/*.c)
+file(GLOB_RECURSE JIT_SOURCES ${PROJECT_SOURCE_DIR}/Jit/*.cpp) #${PROJECT_SOURCE_DIR}/Jit/*.c)
 add_library(jit ${JIT_SOURCES})
 target_link_libraries(jit PRIVATE asmjit::asmjit interpreter fmt::fmt nlohmann_json::nlohmann_json)
 
