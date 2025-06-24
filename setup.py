@@ -79,6 +79,8 @@ class BuildExt(build_ext):
             f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={os.path.dirname(extension_dir)}",
             f"-DCMAKE_C_COMPILER={cc}",
             f"-DCMAKE_CXX_COMPILER={cxx}",
+            f"-DPY_VERSION=3.14",
+            f"-DMETA_PYTHON=0",
         ]
 
         build_args = [

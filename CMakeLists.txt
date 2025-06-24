@@ -238,7 +238,7 @@ target_link_libraries(cached-properties PRIVATE common borrowed)
 
 set(INTERP_SOURCES ${PROJECT_SOURCE_DIR}/Interpreter/iter_helpers.c)
 
-if (${PY_VERSION} EQUAL 3.12)
+if (${PY_VERSION} EQUAL 3.12 OR ${PY_VERSION} EQUAL 3.14)
   set(SOURCE_CINDERX_OPCODE_TARGETS_H ${PROJECT_SOURCE_DIR}/Interpreter/cinderx_opcode_targets_312.h)
   set(SOURCE_CINDER_OPCODE_H ${PROJECT_SOURCE_DIR}/Interpreter/cinder_opcode_312.h)
   set(SOURCE_OPCODE_H ${PROJECT_SOURCE_DIR}/Interpreter/opcode_312.h)
@@ -287,7 +287,7 @@ target_link_libraries(static-python PRIVATE fmt::fmt common borrowed)
 ########################################
 # Jit/
 
-file(GLOB_RECURSE JIT_SOURCES ${PROJECT_SOURCE_DIR}/Jit/*.cpp ${PROJECT_SOURCE_DIR}/Jit/*.c)
+file(GLOB_RECURSE JIT_SOURCES ${PROJECT_SOURCE_DIR}/Jit/*.cpp) #${PROJECT_SOURCE_DIR}/Jit/*.c)
 add_library(jit ${JIT_SOURCES})
 target_link_libraries(jit PRIVATE asmjit::asmjit interpreter fmt::fmt nlohmann_json::nlohmann_json)
 
