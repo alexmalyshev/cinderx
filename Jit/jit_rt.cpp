@@ -210,12 +210,13 @@ PyObject* JITRT_CallWithKeywordArgs(
     PyObject** args,
     size_t nargsf,
     PyObject* kwnames) {
-  PyCodeObject* co = (PyCodeObject*)func->func_code;
+  BorrowedRef<> func_obj{reinterpret_cast<PyObject*>(func)};
+  BorrowedRef<PyCodeObject> co{func->func_code};
   const Py_ssize_t total_args = co->co_argcount + co->co_kwonlyargcount +
       ((co->co_flags & CO_VARKEYWORDS) ? 1 : 0) +
       ((co->co_flags & CO_VARARGS) ? 1 : 0);
   auto arg_space = std::make_unique<PyObject*[]>(total_args);
-  Ref<PyObject> kwdict, varargs;
+  Ref<> kwdict, varargs;
 
   if (JITRT_BindKeywordArgs(
           func,
@@ -231,10 +232,11 @@ PyObject* JITRT_CallWithKeywordArgs(
     new_nargsf |= (nargsf & Ci_Py_AWAITED_CALL_MARKER);
 #endif
     return JITRT_GET_REENTRY(func->vectorcall)(
-        (PyObject*)func, arg_space.get(), new_nargsf, nullptr);
+        func_obj, arg_space.get(), new_nargsf, nullptr);
   }
 
-  return _PyFunction_Vectorcall((PyObject*)func, args, nargsf, kwnames);
+  auto vectorcall = getDefaultInterpretedVectorcall(func);
+  return vectorcall(func_obj, args, nargsf, kwnames);
 }
 
 typedef JITRT_StaticCallReturn (*staticvectorcallfunc)(
@@ -676,7 +678,7 @@ void JITRT_InitFrameCellVars(
     int nvars,
     PyThreadState* tstate) {
   PyObject* closure = func->func_closure;
-  PyCodeObject* co = (PyCodeObject*)func->func_code;
+  BorrowedRef<PyCodeObject> co{func->func_code};
   int offset = co->co_nlocalsplus - nvars;
   _PyInterpreterFrame* frame = interpFrameFromThreadState(tstate);
   for (int i = 0; i < nvars; i++) {
