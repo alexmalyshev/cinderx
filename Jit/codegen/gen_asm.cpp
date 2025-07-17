@@ -299,17 +299,19 @@ void* finalizeCode(asmjit::x86::Builder& builder, std::string_view name) {
         DebugUtils::errorAsString(err))};
   }
 
-  void* result = nullptr;
-  if (auto err = CodeAllocator::get()->addCode(&result, builder.code());
-      err != kErrorOk) {
+  auto mod_state = cinderx::getModuleState();
+  auto allocator = mod_state->codeAllocator();
+
+  auto result = allocator->addCode(builder.code());
+  if (result.error != kErrorOk) {
     throw std::runtime_error{fmt::format(
         "Failed to add generated code for {} to asmjit runtime, got error code "
         "{}",
         name,
-        DebugUtils::errorAsString(err))};
+        DebugUtils::errorAsString(result.error))};
   }
 
-  return result;
+  return result.addr;
 }
 
 // Generate the final stage trampoline that is responsible for finishing
@@ -319,7 +321,9 @@ void* generateDeoptTrampoline(bool generator_mode) {
       generator_mode ? "deopt_trampoline_generators" : "deopt_trampoline";
 
   CodeHolder code;
-  ASM_CHECK(code.init(CodeAllocator::get()->asmJitEnvironment()), name);
+  auto mod_state = cinderx::getModuleState();
+  auto allocator = mod_state->codeAllocator();
+  ASM_CHECK(code.init(allocator->asmJitEnvironment()), name);
   x86::Builder a(&code);
   Annotations annot;
 
@@ -507,7 +511,9 @@ void* generateDeoptTrampoline(bool generator_mode) {
 
 void* generateFailedDeferredCompileTrampoline() {
   CodeHolder code;
-  code.init(CodeAllocator::get()->asmJitEnvironment());
+  auto mod_state = cinderx::getModuleState();
+  auto allocator = mod_state->codeAllocator();
+  code.init(allocator->asmJitEnvironment());
   x86::Builder a(&code);
   Annotations annot;
 
@@ -656,7 +662,9 @@ void* NativeGenerator::getVectorcallEntry() {
   JIT_CHECK(as_ == nullptr, "x86::Builder should not have been initialized.");
 
   CodeHolder code;
-  code.init(CodeAllocator::get()->asmJitEnvironment());
+  auto mod_state = cinderx::getModuleState();
+  auto allocator = mod_state->codeAllocator();
+  code.init(allocator->asmJitEnvironment());
   ThrowableErrorHandler eh;
   code.setErrorHandler(&eh);
 

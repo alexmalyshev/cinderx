@@ -17,6 +17,7 @@
 #include "cinderx/Jit/lir/regalloc.h"
 #include "cinderx/RuntimeTests/fixtures.h"
 #include "cinderx/RuntimeTests/testutil.h"
+#include "cinderx/module_state.h"
 
 #include <filesystem>
 #include <fstream>
@@ -53,7 +54,9 @@ class BackendTest : public RuntimeTest {
     post_rewrite.run();
 
     asmjit::CodeHolder code;
-    code.init(CodeAllocator::get()->asmJitEnvironment());
+    auto mod_state = cinderx::getModuleState();
+    auto allocator = mod_state->codeAllocator();
+    code.init(allocator->asmJitEnvironment());
 
     asmjit::x86::Builder as(&code);
 
@@ -104,12 +107,15 @@ class BackendTest : public RuntimeTest {
     as.ret();
 
     as.finalize();
-    void* func = nullptr;
-    CodeAllocator::get()->addCode(&func, &code);
-    EXPECT_TRUE(CodeAllocator::get()->contains(func))
+
+    auto mod_state = cinderx::getModuleState();
+    auto allocator = mod_state->codeAllocator();
+    auto result = allocator->addCode(&code);
+    EXPECT_EQ(result.error, asmjit::kErrorOk);
+    EXPECT_TRUE(allocator->contains(result.addr))
         << "Compiled function should exist within the CodeAllocator";
     gen.lir_func_.release();
-    return func;
+    return result.addr;
   }
 
   void InitEnviron(Environ& environ) {
