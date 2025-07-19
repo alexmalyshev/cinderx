@@ -175,8 +175,8 @@ target_link_libraries(common PRIVATE fmt::fmt ZLIB::ZLIB)
 ########################################
 # UpstreamBorrow/
 
-if (${PY_VERSION} EQUAL 3.12)
-  set(BORROWED_C ${PROJECT_SOURCE_DIR}/UpstreamBorrow/borrowed-3.12.gen_cached.c)
+if (${PY_VERSION} EQUAL 3.12 OR ${PY_VERSION} EQUAL 3.14)
+  set(BORROWED_C ${PROJECT_SOURCE_DIR}/UpstreamBorrow/borrowed-${PY_VERSION}.gen_cached.c)
 else()
   set(BORROWED_C "${GENERATED_HEADER_DIR}/dummy-borrowed.c")
   file(WRITE ${BORROWED_C} "")
