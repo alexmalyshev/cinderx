@@ -336,3 +336,9 @@ enum {
   STUB_OPCODE_DEFS(DEFINE_OPCODE)
 #undef DEFINE_OPCODE
 };
+
+#ifndef ENABLE_LAZY_IMPORTS
+enum {
+  EAGER_IMPORT_NAME = 50000,
+};
+#endif
