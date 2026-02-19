@@ -293,8 +293,8 @@ class PhyRegisterSet {
  private:
   uint64_t rs_;
 
-  int GetLastBit() const {
-    return (sizeof(rs_) * CHAR_BIT - 1) - __builtin_clzll(rs_);
+  constexpr int GetLastBit() const {
+    return (sizeof(rs_) * CHAR_BIT - 1) - std::countl_zero(rs_);
   }
 };
 

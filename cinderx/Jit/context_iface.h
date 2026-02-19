@@ -8,7 +8,7 @@
 
 namespace jit {
 
-class alignas(16) CodeRuntime;
+class CodeRuntime;
 
 class IJitContext {
  public:
