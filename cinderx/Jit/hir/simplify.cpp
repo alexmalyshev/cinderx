@@ -506,6 +506,58 @@ Register* simplifyIsTruthy(Env& env, const IsTruthy* instr) {
   return nullptr;
 }
 
+Register* simplifyIsCompactLong(Env& env, const IsCompactLong* instr) {
+  Type ty = instr->GetOperand(0)->type();
+  JIT_CHECK(
+      ty <= TLongExact || ty <= TCInt64,
+      "IsCompactLong generated for invalid type '{}'",
+      ty);
+  if (ty.hasObjectSpec()) {
+    env.emit<UseType>(instr->GetOperand(0), ty);
+    bool compact =
+        _PyLong_IsCompact(reinterpret_cast<PyLongObject*>(ty.objectSpec()));
+    return env.emit<LoadConst>(Type::fromCBool(compact));
+  }
+
+  // IsCompactLong(box(n)) --> IsCompactLong(n).
+  Register* operand = instr->GetOperand(0);
+  if (operand->instr()->IsPrimitiveBox()) {
+    auto* box = static_cast<const PrimitiveBox*>(operand->instr());
+    if (box->type() <= TCInt64) {
+      return env.emit<IsCompactLong>(box->value());
+    }
+  }
+
+  return nullptr;
+}
+
+Register* simplifyCompactLongUnbox(Env& env, const CompactLongUnbox* instr) {
+  Type ty = instr->GetOperand(0)->type();
+  JIT_CHECK(
+      ty <= TLongExact, "CompactLongUnbox generated for invalid type '{}'", ty);
+  if (ty.hasObjectSpec()) {
+    auto* long_obj = reinterpret_cast<PyLongObject*>(ty.objectSpec());
+    if (!_PyLong_IsCompact(long_obj)) {
+      // Should be unreachable.
+      return nullptr;
+    }
+    env.emit<UseType>(instr->GetOperand(0), ty);
+    Py_ssize_t value = _PyLong_CompactValue(long_obj);
+    return env.emit<LoadConst>(Type::fromCInt(value, TCInt64));
+  }
+
+  // CompactLongUnbox(box(n)) --> n.
+  Register* operand = instr->GetOperand(0);
+  if (operand->instr()->IsPrimitiveBox()) {
+    auto* box = static_cast<const PrimitiveBox*>(operand->instr());
+    if (box->type() <= TCInt64) {
+      return box->value();
+    }
+  }
+
+  return nullptr;
+}
+
 Register* simplifyLoadTupleItem(Env& env, const LoadTupleItem* instr) {
   Register* src = instr->GetOperand(0);
   Type src_ty = src->type();
@@ -754,6 +806,7 @@ Register* simplifyBinaryOp(Env& env, const BinaryOp* instr) {
     Register* float_reg = nullptr;
     Register* int_reg = nullptr;
     bool int_on_right = false;
+
     if (lhs->isA(TFloatExact) && rhs->isA(TLongExact) &&
         rhs->type().hasObjectSpec()) {
       float_reg = lhs;
@@ -766,6 +819,7 @@ Register* simplifyBinaryOp(Env& env, const BinaryOp* instr) {
       int_reg = lhs;
       int_on_right = false;
     }
+
     if (float_reg != nullptr) {
       int overflow;
       long long_val =
@@ -790,6 +844,54 @@ Register* simplifyBinaryOp(Env& env, const BinaryOp* instr) {
             env.emit<DoubleBinaryOp>(op, unbox_left, unbox_right);
         return env.emit<PrimitiveBox>(result, TCDouble, *instr->frameState());
       }
+    }
+  }
+
+  // Mixed float/int binary ops where the int is NOT a known constant: guard
+  // that the int is compact (fits in a single 30-bit digit, thus losslessly
+  // convertible to double), unbox both to CDouble, and emit DoubleBinaryOp.
+  if ((op == BinaryOpKind::kAdd || op == BinaryOpKind::kSubtract ||
+       op == BinaryOpKind::kMultiply || op == BinaryOpKind::kTrueDivide ||
+       op == BinaryOpKind::kPower)) {
+    Register* float_reg = nullptr;
+    Register* int_reg = nullptr;
+    bool int_on_right = false;
+
+    if (lhs->isA(TFloatExact) && rhs->isA(TLongExact) &&
+        !rhs->type().hasObjectSpec()) {
+      float_reg = lhs;
+      int_reg = rhs;
+      int_on_right = true;
+    } else if (
+        lhs->isA(TLongExact) && rhs->isA(TFloatExact) &&
+        !lhs->type().hasObjectSpec()) {
+      float_reg = rhs;
+      int_reg = lhs;
+      int_on_right = false;
+    }
+
+    if (float_reg != nullptr) {
+      env.emit<UseType>(float_reg, TFloatExact);
+      env.emit<UseType>(int_reg, TLongExact);
+      // Guard that the long is compact (at most one digit, fits in double).
+      Register* is_compact = env.emit<IsCompactLong>(int_reg);
+      env.emitInstr<Guard>(is_compact);
+      // Unbox the compact long to CInt64 and convert to CDouble.
+      Register* unbox_int = env.emit<CompactLongUnbox>(int_reg);
+      Register* int_as_double = env.emit<IntConvert>(unbox_int, TCDouble);
+      // Unbox the float to CDouble.
+      Register* unbox_float = env.emit<PrimitiveUnbox>(float_reg, TCDouble);
+      Register* unbox_left = int_on_right ? unbox_float : int_as_double;
+      Register* unbox_right = int_on_right ? int_as_double : unbox_float;
+      // Need to guard against division by zero.
+      if (op == BinaryOpKind::kTrueDivide) {
+        Register* zero = env.emit<LoadConst>(Type::fromCDouble(0.0));
+        Register* is_nonzero = env.emit<PrimitiveCompare>(
+            PrimitiveCompareOp::kNotEqual, unbox_right, zero);
+        env.emitInstr<Guard>(is_nonzero);
+      }
+      Register* result = env.emit<DoubleBinaryOp>(op, unbox_left, unbox_right);
+      return env.emit<PrimitiveBox>(result, TCDouble, *instr->frameState());
     }
   }
 
@@ -1993,6 +2095,12 @@ Register* simplifyInstr(Env& env, const Instr* instr) {
 
     case Opcode::kIsTruthy:
       return simplifyIsTruthy(env, static_cast<const IsTruthy*>(instr));
+    case Opcode::kIsCompactLong:
+      return simplifyIsCompactLong(
+          env, static_cast<const IsCompactLong*>(instr));
+    case Opcode::kCompactLongUnbox:
+      return simplifyCompactLongUnbox(
+          env, static_cast<const CompactLongUnbox*>(instr));
 
 // TODO(T255262756) - Enable this again. See P2169675076 and P2184559031 (same
 // pattern but applied to simplifyLoadAttrTypeReceiver).
