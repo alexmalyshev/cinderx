@@ -3,11 +3,42 @@ name: CI
 on: [push, pull_request]
 
 jobs:
-  run_tests:
-    name: Run Tests
+  build:
+    name: Build on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
-      # Don't let test failures on one platform block other platforms.
+      # Don't let build failures on one platform block other platforms.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm, windows-latest]
+
+    steps:
+    - name: Checkout CinderX
+      uses: actions/checkout@v6
+
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: '3.14.4'
+
+    - name: Set up uv
+      uses: astral-sh/setup-uv@v7
+
+    - name: Build CinderX
+      run: uv build --wheel --python 3.14.4
+
+    - name: Upload wheel
+      uses: actions/upload-artifact@v4
+      with:
+        name: wheel-${{ matrix.os }}
+        path: dist/*.whl
+
+  run_tests:
+    name: Run Tests
+    needs: build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # Don't let test failures on one OS/version block other combinations.
       fail-fast: false
       matrix:
         os: [ubuntu-latest, ubuntu-24.04-arm, windows-latest]
@@ -28,11 +59,14 @@ jobs:
     - name: Set up uv
       uses: astral-sh/setup-uv@v7
 
+    - name: Download wheel
+      uses: actions/download-artifact@v4
+      with:
+        name: wheel-${{ matrix.os }}
+        path: dist
+
     - name: Create venv
       run: uv venv --python ${{ matrix.python-version }}
-
-    - name: Build CinderX
-      run: uv build --wheel --python ${{ matrix.python-version }}
 
     - name: Install CinderX
       run: uv pip install cinderx --find-links dist --no-index
@@ -51,6 +85,9 @@ jobs:
       run: uv run pytest cinderx/PythonLib/test_cinderx/test*.py
 
   build_wheels:
+    # Ensure that cibuildwheel can produce distributable manylinux packages.
+    # Different from the `build` action used for local CI testing.
+
     name: Build wheels on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
