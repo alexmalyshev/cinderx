@@ -1814,13 +1814,20 @@ LIRGenerator::TranslatedBlock LIRGenerator::TranslateOneBasicBlock(
               instr->output(), Instruction::kInt64ToDouble, instr->src());
         } else if (instr->type() <= TCUnsigned) {
           bbb.appendInstr(instr->output(), Instruction::kZext, instr->src());
-        } else {
-          JIT_CHECK(
-              instr->type() <= TCSigned,
-              "Unexpected PrimitiveConvert type {}",
-              instr->type());
+        } else if (instr->type() <= TCSigned) {
           bbb.appendInstr(instr->output(), Instruction::kSext, instr->src());
+        } else if (instr->type() <= TCPtr) {
+          JIT_CHECK(
+            instr->src()->type().sizeInBytes() == TCPtr.sizeInBytes(),
+            "Trying to convert non-pointer sized type {} to CPtr",
+            instr->src()->type()
+          );
+          bbb.appendInstr(instr->output(), Instruction::kMove, instr->src());
+        } else {
+          JIT_ABORT(
+              "Unexpected output type {} in PrimitiveConvert", instr->type());
         }
+
         break;
       }
       case Opcode::kIntBinaryOp: {
