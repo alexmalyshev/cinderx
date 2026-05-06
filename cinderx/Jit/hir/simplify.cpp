@@ -18,6 +18,7 @@
 #include "cinderx/Jit/threaded_compile.h"
 #include "cinderx/StaticPython/strictmoduleobject.h"
 
+#include <cstring>
 #include <fmt/ostream.h>
 
 namespace jit::hir {
@@ -365,6 +366,136 @@ Register* emitGetLengthInt64(Env& env, Register* obj) {
   return nullptr;
 }
 
+// Get the kind field from a unicode object. The kind indicates the character
+// size: 1 for Py_UCS1 (Latin-1), 2 for Py_UCS2 (BMP), 4 for Py_UCS4.
+Register* emitGetUnicodeKind(Env& env, Register* obj) {
+  Type ty = obj->type();
+  JIT_CHECK(
+      ty <= TUnicodeExact,
+      "emitGetUnicodeKind called with non-UnicodeExact type: {}",
+      ty);
+
+  // Constant folding: if the object is a constant unicode string, return its
+  // kind directly.
+  if (ty.hasObjectSpec()) {
+    env.emit<UseType>(obj, ty);
+    PyObject* unicode_obj = ty.objectSpec();
+    int kind = PyUnicode_KIND(unicode_obj);
+    return env.emit<LoadConst>(Type::fromCUInt(kind, TCUInt32));
+  }
+
+  env.emit<UseType>(obj, ty.unspecialized());
+  // The kind is stored as a 3-bit field in the state struct.
+  // We need to load the state and extract the kind bits.
+  // The state struct layout:
+  // - interned: 2 bits
+  // - kind: 3 bits
+  // - compact: 1 bit
+  // - ascii: 1 bit
+  // - statically_allocated: 1 bit
+  // - padding: 24 bits (or not present in Py_GIL_DISABLED)
+  //
+  // The kind field starts at bit 2 (after interned).
+  // We can load the whole state as a 32-bit value and extract the kind.
+  size_t state_offset = offsetof(PyASCIIObject, state);
+  Register* state = env.emit<LoadField>(
+      obj, "state", state_offset, TCUInt32);
+  // Extract kind: (state >> 2) & 0x7
+  Register* shifted = env.emit<IntBinaryOp>(
+      BinaryOpKind::kRShift, state, env.emit<LoadConst>(Type::fromCUInt(2, TCUInt32)));
+  Register* kind = env.emit<IntBinaryOp>(
+      BinaryOpKind::kAnd, shifted, env.emit<LoadConst>(Type::fromCUInt(0x7, TCUInt32)));
+  return kind;
+}
+
+// Get the data pointer from a unicode object.
+Register* emitGetUnicodeData(Env& env, Register* obj) {
+  Type ty = obj->type();
+  JIT_CHECK(
+      ty <= TUnicodeExact,
+      "emitGetUnicodeData called with non-UnicodeExact type: {}",
+      ty);
+
+  // Constant folding: if the object is a constant unicode string, return its
+  // data pointer directly.
+  if (ty.hasObjectSpec()) {
+    env.emit<UseType>(obj, ty);
+    PyObject* unicode_obj = ty.objectSpec();
+    void* data = PyUnicode_DATA(unicode_obj);
+    // Cast the pointer to an integer and then to a LoadConst.
+    // We use TCInt64 to hold the pointer value.
+    int64_t data_int = reinterpret_cast<int64_t>(data);
+    Register* data_reg = env.emit<LoadConst>(Type::fromCInt(data_int, TCInt64));
+    return env.emit<PrimitiveConvert>(data_reg, TCPtr);
+  }
+
+  env.emit<UseType>(obj, ty);
+
+  // Load the state field to check compact and ascii flags.
+  size_t state_offset = offsetof(PyASCIIObject, state);
+  Register* state = env.emit<LoadField>(
+      obj, "state", state_offset, TCUInt32);
+
+  // Extract compact bit: (state >> 5) & 0x1
+  // Bit layout: interned:2, kind:3, compact:1, ascii:1, ...
+  Register* compact_shifted = env.emit<IntBinaryOp>(
+      BinaryOpKind::kRShift,
+      state,
+      env.emit<LoadConst>(Type::fromCUInt(5, TCUInt32)));
+  Register* is_compact = env.emit<IntBinaryOp>(
+      BinaryOpKind::kAnd,
+      compact_shifted,
+      env.emit<LoadConst>(Type::fromCUInt(0x1, TCUInt32)));
+
+  // Use emitCond to handle compact vs non-compact strings.
+  return env.emitCond(
+      [&](BasicBlock* compact_bb, BasicBlock* non_compact_bb) {
+        env.emit<CondBranch>(is_compact, compact_bb, non_compact_bb);
+      },
+      [&] {
+        // Compact string path.
+        // Extract ascii bit: (state >> 6) & 0x1
+        Register* ascii_shifted = env.emit<IntBinaryOp>(
+            BinaryOpKind::kRShift,
+            state,
+            env.emit<LoadConst>(Type::fromCUInt(6, TCUInt32)));
+        Register* is_ascii = env.emit<IntBinaryOp>(
+            BinaryOpKind::kAnd,
+            ascii_shifted,
+            env.emit<LoadConst>(Type::fromCUInt(0x1, TCUInt32)));
+
+        // Compute offset = 40 + (1 - is_ascii) * 16
+        // If is_ascii = 1: offset = 40 + 0 * 16 = 40
+        // If is_ascii = 0: offset = 40 + 1 * 16 = 56
+        Register* one = env.emit<LoadConst>(Type::fromCInt(1, TCInt64));
+        Register* not_ascii = env.emit<IntBinaryOp>(
+          BinaryOpKind::kSubtract,
+          one,
+          env.emit<PrimitiveConvert>(is_ascii, TCInt64)
+        );
+        Register* offset_diff = env.emit<LoadConst>(
+            Type::fromCInt(16, TCInt64));
+        Register* extra = env.emit<IntBinaryOp>(
+            BinaryOpKind::kMultiply, not_ascii, offset_diff);
+        Register* base_offset = env.emit<LoadConst>(
+            Type::fromCInt(40, TCInt64));
+        Register* data_offset = env.emit<IntBinaryOp>(
+            BinaryOpKind::kAdd, base_offset, extra);
+
+        Register* obj_int = env.emit<PrimitiveConvert>(obj, TCInt64);
+        Register* data_int = env.emit<IntBinaryOp>(
+            BinaryOpKind::kAdd, obj_int, data_offset);
+        return env.emit<PrimitiveConvert>(data_int, TCPtr);
+      },
+      [&] {
+        // Non-compact string path.
+        // Data is stored in PyUnicodeObject.data.any field.
+        size_t data_offset = offsetof(PyUnicodeObject, data);
+        return env.emit<LoadField>(
+            obj, "data", data_offset, TCPtr);
+      });
+}
+
 Register* simplifyGetLength(Env& env, const GetLength* instr) {
   Register* obj = instr->GetOperand(0);
   if (Register* size = emitGetLengthInt64(env, obj)) {
@@ -481,6 +612,103 @@ Register* simplifyLongCompare(Env& env, const LongCompare* instr) {
   Register* unboxed_result =
       env.emit<PrimitiveCompare>(*prim_op, compact_left, compact_right);
   return env.emit<PrimitiveBoxBool>(unboxed_result);
+}
+
+Register* simplifyUnicodeCompare(Env& env, const UnicodeCompare* instr) {
+  Register* left = instr->GetOperand(0);
+  Register* right = instr->GetOperand(1);
+  CompareOp op = instr->op();
+  JIT_CHECK(
+    left->isA(TUnicodeExact),
+    "Simplifying UnicodeCompare with lhs {}",
+    *left);
+  JIT_CHECK(
+    right->isA(TUnicodeExact),
+    "Simplifying UnicodeCompare with rhs {}",
+    *right);
+
+  // Only handles the most common Equal and NotEqual cases currently.
+  if (op != CompareOp::kEqual && op != CompareOp::kNotEqual) {
+    return nullptr;
+  }
+
+  // Get both lengths, compare.
+  Register* lhs_len = emitGetLengthInt64(env, left);
+  Register* rhs_len = emitGetLengthInt64(env, right);
+  JIT_CHECK(lhs_len != nullptr, "Failed to emit length check for {}", *left);
+  JIT_CHECK(rhs_len != nullptr, "Failed to emit length check for {}", *right);
+
+  // Compare the lengths. If they're different, we can return the result
+  // immediately without comparing kinds or the actual string data.
+  Register* lengths_equal = env.emit<PrimitiveCompare>(
+      PrimitiveCompareOp::kEqual, lhs_len, rhs_len);
+
+  // First conditional: check if lengths are equal.
+  // If not equal, exit early. If equal, proceed to check kinds.
+  return env.emitCond(
+      [&](BasicBlock* check_kinds_bb, BasicBlock* lengths_not_equal_bb) {
+        env.emit<CondBranch>(
+            lengths_equal, check_kinds_bb, lengths_not_equal_bb);
+      },
+      [&] {
+        // Lengths are equal, now check kinds.
+        Register* lhs_kind = emitGetUnicodeKind(env, left);
+        Register* rhs_kind = emitGetUnicodeKind(env, right);
+
+        Register* kinds_equal = env.emit<PrimitiveCompare>(
+            PrimitiveCompareOp::kEqual, lhs_kind, rhs_kind);
+
+        // Second conditional: check if kinds are equal.
+        // If not equal, exit early. If equal, proceed to compare data.
+        return env.emitCond(
+            [&](BasicBlock* check_data_bb, BasicBlock* kinds_not_equal_bb) {
+              env.emit<CondBranch>(
+                  kinds_equal, check_data_bb, kinds_not_equal_bb);
+            },
+            [&] {
+              // Kinds are equal, need to compare the actual string data.
+              // Get both data pointers.
+              Register* lhs_data = emitGetUnicodeData(env, left);
+              Register* rhs_data = emitGetUnicodeData(env, right);
+
+              // Compute the number of bytes to compare: length * kind
+              Register* byte_count = env.emit<IntBinaryOp>(
+                  BinaryOpKind::kMultiply, lhs_len, lhs_kind);
+
+              // Call memcmp to compare the data.
+              Type memcmp_result_type = TCInt32;
+              Register* memcmp_result = env.emitRawInstr<CallStatic>(
+                  3,
+                  env.func.env.AllocateRegister(),
+                  reinterpret_cast<void*>(memcmp),
+                  memcmp_result_type,
+                  lhs_data,
+                  rhs_data,
+                  byte_count)->output();
+
+              // Check if memcmp result is 0 (equal).
+              Register* zero = env.emit<LoadConst>(
+                  Type::fromCInt(0, memcmp_result_type));
+              Register* bool_result = env.emit<PrimitiveCompare>(
+                  PrimitiveCompareOp::kEqual, memcmp_result, zero);
+              // Return boxed boolean based on the operation.
+              if (op == CompareOp::kNotEqual) {
+                bool_result = env.emit<PrimitiveUnaryOp>(
+                    PrimitiveUnaryOpKind::kNotInt, bool_result);
+              }
+              return env.emit<PrimitiveBoxBool>(bool_result);
+            },
+            [&] {
+              // Kinds differ, strings are not equal.
+              return env.emit<LoadConst>(
+                Type::fromObject(op == CompareOp::kEqual ? Py_False : Py_True));
+            });
+      },
+      [&] {
+        // Lengths differ, strings are not equal.
+        return env.emit<LoadConst>(
+          Type::fromObject(op == CompareOp::kEqual ? Py_False : Py_True));
+      });
 }
 
 Register* simplifyCondBranch(Env& env, const CondBranch* instr) {
@@ -2159,6 +2387,8 @@ Register* simplifyInstr(Env& env, const Instr* instr) {
       return simplifyCompare(env, static_cast<const Compare*>(instr));
     case Opcode::kLongCompare:
       return simplifyLongCompare(env, static_cast<const LongCompare*>(instr));
+    case Opcode::kUnicodeCompare:
+      return simplifyUnicodeCompare(env, static_cast<const UnicodeCompare*>(instr));
 
     case Opcode::kCondBranch:
       return simplifyCondBranch(env, static_cast<const CondBranch*>(instr));
