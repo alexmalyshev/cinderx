@@ -317,6 +317,16 @@ Register* simplifyCast(const Cast* instr) {
 
 Register* emitGetLengthInt64(Env& env, Register* obj) {
   Type ty = obj->type();
+
+  // Constant folding: if the object is a constant unicode string, return its
+  // length directly.
+  if (ty <= TUnicodeExact && ty.hasObjectSpec()) {
+    env.emit<UseType>(obj, ty);
+    PyObject* unicode_obj = ty.objectSpec();
+    Py_ssize_t length = PyUnicode_GET_LENGTH(unicode_obj);
+    return env.emit<LoadConst>(Type::fromCInt(length, TCInt64));
+  }
+
   if (
 // TODO(T255264007). Enable this again. See P2169677410.
 #ifndef Py_GIL_DISABLED
