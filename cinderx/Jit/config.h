@@ -46,6 +46,7 @@ struct HIROptimizations {
   bool insert_update_prev_instr{true};
   bool phi_elim{true};
   bool simplify{true};
+  bool range_loop_optimizer{true};
 };
 
 // List of LIR optimization passes to run.

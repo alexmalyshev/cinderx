@@ -17,6 +17,7 @@
 #include "cinderx/Jit/hir/insert_update_prev_instr.h"
 #include "cinderx/Jit/hir/phi_elimination.h"
 #include "cinderx/Jit/hir/printer.h"
+#include "cinderx/Jit/hir/range_loop_optimizer.h"
 #include "cinderx/Jit/hir/refcount_insertion.h"
 #include "cinderx/Jit/hir/simplify.h"
 #include "cinderx/Jit/hir/ssa.h"
@@ -87,6 +88,7 @@ void Compiler::runPasses(
   };
 
   runPassIf(hir::Simplify{}, PassConfig::kSimplify);
+  runPassIf(hir::RangeLoopOptimizer{}, PassConfig::kRangeLoopOptimizer);
   runPassIf(
       hir::DynamicComparisonElimination{}, PassConfig::kDynamicComparisonElim);
   runPassIf(hir::GuardTypeRemoval{}, PassConfig::kGuardTypeRemoval);
@@ -158,6 +160,7 @@ PassConfig createConfig() {
   set(hir_opts.insert_update_prev_instr, PassConfig::kInsertUpdatePrevInstr);
   set(hir_opts.phi_elim, PassConfig::kPhiElim);
   set(hir_opts.simplify, PassConfig::kSimplify);
+  set(hir_opts.range_loop_optimizer, PassConfig::kRangeLoopOptimizer);
 
   return static_cast<PassConfig>(result);
 }
