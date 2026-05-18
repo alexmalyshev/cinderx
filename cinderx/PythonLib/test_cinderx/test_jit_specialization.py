@@ -326,3 +326,64 @@ class SpecializationTests(unittest.TestCase):
         c = C()
         with self.assertRaises(AttributeError):
             f()
+
+    def test_load_attr_instance(self) -> None:
+        class C:
+            def __init__(self, x: int, y: int) -> None:
+                self.x = x
+                self.y = y
+
+        c = C(10, 20)
+
+        def f() -> int:
+            return c.x
+
+        specialize(f, lambda: f())
+
+        self.assertNotIn("LOAD_ATTR", opnames(f))
+        self.assertIn("LOAD_ATTR_INSTANCE_VALUE", opnames(f))
+        self.assertEqual(f(), 10)
+
+    def test_load_attr_instance_second_attr(self) -> None:
+        class C:
+            def __init__(self, x: int, y: int) -> None:
+                self.x = x
+                self.y = y
+
+        c = C(10, 20)
+
+        def f() -> int:
+            return c.y
+
+        specialize(f, lambda: f())
+
+        self.assertNotIn("LOAD_ATTR", opnames(f))
+        self.assertIn("LOAD_ATTR_INSTANCE_VALUE", opnames(f))
+        self.assertEqual(f(), 20)
+
+    def test_load_attr_instance_value_uninitialized(self) -> None:
+        class C:
+            def __init__(self, val: object = None) -> None:
+                if val is not None:
+                    self.x = val
+
+        c = C(42)
+
+        def f() -> object:
+            return c.x
+
+        # First warm up and specialize with initialized attribute.
+        specialize(f, lambda: f())
+
+        self.assertNotIn("LOAD_ATTR", opnames(f))
+        self.assertIn("LOAD_ATTR_INSTANCE_VALUE", opnames(f))
+        self.assertEqual(f(), 42)
+
+        # Now test with an uninitialized instance.
+        c = C()
+        with self.assertRaises(AttributeError):
+            f()
+
+
+if __name__ == "__main__":
+    unittest.main()

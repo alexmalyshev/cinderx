@@ -2742,6 +2742,7 @@ void HIRBuilder::emitLoadAttr(
         tc.emit<GuardType>(receiver, type, receiver, tc.frame);
         break;
       }
+      case LOAD_ATTR_INSTANCE_VALUE:
       case LOAD_ATTR_SLOT: {
         // Fetch type version and slot index from the inline cache.
         // The cache layout for LOAD_ATTR_SLOT is:
@@ -2782,6 +2783,24 @@ void HIRBuilder::emitLoadAttr(
             opcodeName(specialized_opcode)));
 
         BorrowedRef<> slot_name = getVarname(code_, name_idx);
+
+        // Might need to verify the object has inline values.
+        if (specialized_opcode == LOAD_ATTR_INSTANCE_VALUE) {
+          // Load the object's basic size.
+          Register* basic_size = temps_.AllocateNonStack();
+          tc.emit<LoadField>(
+              basic_size, type, "tp_basicsize",
+              offsetof(PyTypeObject, tp_basicsize), TCInt64);
+          Register* inline_values = temps_.AllocateNonStack();
+          tc.emit<LoadFieldAddress>(inline_values, receiver, basic_size);
+          Register* is_valid = temps_.AllocateNonStack();
+          tc.emit<LoadField>(
+              is_valid, inline_values, "valid", offsetof(PyDictValues, valid),
+              TCUInt8);
+          auto guard_valid = tc.emit<Guard>(is_valid);
+          guard_valid->setDescr(
+              "LOAD_ATTR_INSTANCE_VALUE: Inline values invalid");
+        }
 
         // Do a load from the slot offset.
         Register* result = temps_.AllocateStack();
