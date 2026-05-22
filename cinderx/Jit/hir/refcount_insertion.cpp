@@ -1226,6 +1226,8 @@ void bindGuards(Function& irfunc) {
     snapshot->unlink();
     delete snapshot;
   }
+
+  // Run a round of DCE because snapshots hold instructions as live.
   DeadCodeElimination{}.Run(irfunc);
 }
 

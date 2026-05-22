@@ -316,6 +316,13 @@ FlagProcessor initFlagProcessor() {
 
   flag_processor
       .addOption(
+          "jit-debug-dead-code-elimination",
+          "CINDERX_JIT_DEBUG_DEAD_CODE_ELIMINATION",
+          getMutableConfig().log.debug_dead_code_elimination,
+          "JIT dead code elimination debug mode");
+
+  flag_processor
+      .addOption(
           "jit-debug-refcount",
           "CINDERX_JIT_DEBUG_REFCOUNT",
           getMutableConfig().log.debug_refcount,
