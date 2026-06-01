@@ -73,11 +73,18 @@ TEST(UtilTest, SymbolizerResolvesStaticSymbol) {
   EXPECT_EQ(*result, "PyObject_Size");
 }
 
-TEST(UtilTest, DemangleWithCNameReturnsName) {
+TEST(UtilTest, SymbolizerResolvesCXXSymbol) {
+  jit::Symbolizer symbolizer;
+  std::optional<std::string_view> result =
+      symbolizer.symbolize(reinterpret_cast<void*>(jit::Runtime::get));
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(*result, "jit::Runtime::get");
+}
+
+TEST(UtilTest, DemangleWithCNameFails) {
   jit::Symbolizer symbolizer;
   std::optional<std::string> result = jit::demangle("PyObject_Size");
-  ASSERT_TRUE(result.has_value());
-  EXPECT_EQ(*result, "PyObject_Size");
+  ASSERT_FALSE(result.has_value());
 }
 
 TEST(UtilTest, DemangleWithCXXNameReturnsDemangledName) {
@@ -87,11 +94,10 @@ TEST(UtilTest, DemangleWithCXXNameReturnsDemangledName) {
   EXPECT_EQ(*result, "jit::Runtime::get()");
 }
 
-TEST(UtilTest, DemangleWithInvalidCXXNameReturnsInput) {
+TEST(UtilTest, DemangleWithInvalidCXXNameFails) {
   jit::Symbolizer symbolizer;
   std::optional<std::string> result = jit::demangle("_ZWTFBBQ");
-  ASSERT_TRUE(result.has_value());
-  EXPECT_EQ(*result, "_ZWTFBBQ");
+  ASSERT_FALSE(result.has_value());
 }
 
 TEST(UtilTest, FitsSignedInt) {

@@ -61,6 +61,11 @@ class Symbolizer : public ISymbolizer {
   std::unordered_map<const void*, std::optional<std::string>> cache_;
 };
 
+// Check if a symbol name appears to be mangled (e.g. "_ZN3jit7Runtime3getEv").
+bool looksMangled(std::string_view symbol);
+
+// Demangle a symbol name.  Will return std::nullopt if this cannot map the
+// input to a new demangled input.
 std::optional<std::string> demangle(const std::string& mangled_name);
 
 // Symbolize and demangle the given function.

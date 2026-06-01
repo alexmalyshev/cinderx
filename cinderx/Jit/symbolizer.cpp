@@ -6,10 +6,12 @@
 #include "cinderx/Common/util.h"
 #include "cinderx/module_state.h"
 
-#ifndef WIN32
+#include <algorithm>
 
+#ifdef _MSC_VER
+#include <dbghelp.h>
+#else
 #include <cxxabi.h>
-
 #endif
 
 #ifdef ENABLE_SYMBOLIZER
@@ -232,28 +234,57 @@ void Symbolizer::deinit() {
   cache_.clear();
 }
 
+bool looksMangled(std::string_view func_name) {
+  using namespace std::literals;
+
+  constexpr auto prefixes = std::to_array({
+      // Linux.
+      "_Z"sv,
+      // macOS.
+      "__Z"sv,
+      // MSVC.
+      "?"sv,
+  });
+  return std::ranges::any_of(prefixes, [&](std::string_view prefix) {
+    return func_name.starts_with(prefix);
+  });
+}
+
 std::optional<std::string> demangle(const std::string& mangled_name) {
-#ifndef WIN32
-  int status;
-  char* demangled_name =
-      abi::__cxa_demangle(mangled_name.c_str(), nullptr, nullptr, &status);
-  if (demangled_name == nullptr) {
-    if (status == -1) {
-      JIT_DLOG("Could not allocate memory for demangled name");
-    } else if (status == -2) {
-      JIT_DLOG("Mangled name '{}' is not valid", mangled_name);
-      // Couldn't demangle. Oh well. Probably better to have some name than
-      // none at all.
-      return mangled_name;
-    } else if (status == -3) {
-      JIT_DLOG("Invalid input to __cxa_demangle");
-    }
-    return std::nullopt;
+#ifdef _MSC_VER
+  // Everything in dbghelp.h is thread-unsafe.
+  static std::mutex dbg_mtx;
+  std::array<char, 128> buf;
+  // Prints "[scope]::name".
+  constexpr auto flags = UNDNAME_NAME_ONLY;
+  auto guard = std::lock_guard{dbg_mtx};
+  if (UnDecorateSymbolName(
+          mangled_name.c_str(), buf.data(), buf.size(), flags)) {
+    return std::string{buf.data()};
   }
-  std::string result{demangled_name};
-  std::free(demangled_name);
-  return result;
+  auto err = GetLastError();
+  JIT_DLOG("Failed to demangle name '{}', error code {}", mangled_name, err);
+  return std::nullopt;
 #else
+  int status;
+  auto demangled_name = unique_c_ptr<char>{
+      abi::__cxa_demangle(mangled_name.c_str(), nullptr, nullptr, &status)};
+  if (demangled_name != nullptr) {
+    return std::string{demangled_name.get()};
+  }
+  if (status == -1) {
+    JIT_DLOG("Could not allocate memory to demangle symbol '{}'", mangled_name);
+  } else if (status == -2) {
+    JIT_DLOG("Mangled name '{}' is not valid", mangled_name);
+  } else if (status == -3) {
+    JIT_DLOG(
+        "Invalid input to __cxa_demangle when demangling '{}'", mangled_name);
+  } else {
+    JIT_DLOG(
+        "Unrecognized error code {} from __cxa_demangle when demangling '{}'",
+        status,
+        mangled_name);
+  }
   return std::nullopt;
 #endif
 }
@@ -268,12 +299,30 @@ std::optional<std::string> symbolize(const void* func) {
     return std::nullopt;
   }
 
-  std::optional<std::string_view> mangled_name =
+  // Get the symbol's name from file metadata.
+  std::optional<std::string_view> name =
       module_state->symbolizer.get()->symbolize(func);
-  if (!mangled_name.has_value()) {
+  if (!name.has_value()) {
     return std::nullopt;
   }
-  return demangle(std::string{*mangled_name});
+
+  // If the name doesn't appear to be mangled, return it directly.  Trying to
+  // demangle C functions will trigger debug logs, avoid this.  The debug logs
+  // are meant for symbols that are somehow malformed.
+  auto name_str = std::string{*name};
+  if (!looksMangled(name_str)) {
+    return name_str;
+  }
+
+  std::optional<std::string> demangled_name = demangle(name_str);
+
+  // If demangling fails for whatever reason, use the original name because it's
+  // better than nothing.
+  if (!demangled_name.has_value()) {
+    return name_str;
+  }
+
+  return demangled_name;
 #else
   return std::nullopt;
 #endif
