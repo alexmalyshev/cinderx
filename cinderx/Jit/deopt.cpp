@@ -22,18 +22,21 @@
 #endif
 
 #include <bit>
+#include <mutex>
 #include <shared_mutex>
+#include <string>
+#include <unordered_set>
 
 namespace cinderx::jit {
 
 namespace {
 
 // Set of interned strings for deopt descriptions.
-std::unordered_set<std::string> s_descrs;
+std::unordered_set<std::string, StringHash, std::equal_to<>> s_descrs;
 std::shared_mutex s_descrs_mutex;
 
 // Intern a description string and return a reference to it.
-const std::string& internDescr(const std::string& descr) {
+const std::string& internDescr(std::string_view descr) {
   std::shared_lock reader_guard{s_descrs_mutex};
   if (auto iter = s_descrs.find(descr); iter != s_descrs.end()) {
     return *iter;
@@ -650,13 +653,13 @@ DeoptMetadata DeoptMetadata::fromInstr(const jit::hir::DeoptBase& instr) {
   return meta;
 }
 
-DeoptMetadata DeoptMetadata::fromInstr(const jit::hir::LiveValuesBase& instr) {
-  std::unordered_map<jit::hir::Register*, int> reg_idx;
+DeoptMetadata DeoptMetadata::fromInstr(const hir::LiveValuesBase& instr) {
+  std::unordered_map<hir::Register*, int> reg_idx;
   DeoptMetadata meta = initDeoptMetadata(instr, reg_idx);
   meta.frame_meta.initialize(1);
 
   meta.reason = DeoptReason::kUnhandledException;
-  const std::string& interned = internDescr(std::string{instr.opname()});
+  const std::string& interned = internDescr(instr.opname());
   meta.descr = interned.c_str();
   return meta;
 }
