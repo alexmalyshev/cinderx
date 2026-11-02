@@ -24,6 +24,10 @@
 #undef small
 #endif
 
+// Quiet warnings about these being redefined.
+#pragma push_macro("_POSIX_C_SOURCE")
+#pragma push_macro("_XOPEN_SOURCE")
+
 #include <Python.h>
 
 #if PY_VERSION_HEX >= 0x030E0000
@@ -88,3 +92,6 @@ destructor Ci_GetJITExecutableDealloc(void);
 // part of the public Python API and we might as well tack them on.
 #include <frameobject.h>
 #include <structmember.h>
+
+#pragma pop_macro("_POSIX_C_SOURCE")
+#pragma pop_macro("_XOPEN_SOURCE")
